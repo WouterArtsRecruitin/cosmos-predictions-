@@ -121,43 +121,13 @@ export default function SimpleCosmosLanding() {
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
 
-    // Star material with shader
-    const material = new THREE.ShaderMaterial({
-      uniforms: {
-        time: { value: 0 }
-      },
-      vertexShader: `
-        attribute float size;
-        attribute vec3 color;
-        varying vec3 vColor;
-        uniform float time;
-        
-        void main() {
-          vColor = color;
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          
-          // Subtle pulsing
-          float pulse = 1.0 + 0.15 * sin(time * 1.5 + position.x * 0.01);
-          gl_PointSize = size * pulse * 200.0 * (400.0 / -mvPosition.z);
-          gl_Position = projectionMatrix * mvPosition;
-        }
-      `,
-      fragmentShader: `
-        varying vec3 vColor;
-        
-        void main() {
-          float dist = length(gl_PointCoord - vec2(0.5));
-          if (dist > 0.5) discard;
-          
-          float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
-          alpha = pow(alpha, 0.8); // Make stars brighter
-          gl_FragColor = vec4(vColor, alpha * 1.2);
-        }
-      `,
+    // Simple working material like the test
+    const material = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 3,
+      sizeAttenuation: true,
       transparent: true,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
+      opacity: 0.8
     });
 
     const starSystem = new THREE.Points(geometry, material);
@@ -208,10 +178,8 @@ export default function SimpleCosmosLanding() {
     setTimeout(() => setShowForm(true), 2000);
 
     // Animation loop
-    let time = 0;
     function animate() {
       animationIdRef.current = requestAnimationFrame(animate);
-      time += 0.005;
       
       // Smooth rotation towards target
       starSystem.rotation.y += (targetRotationY - starSystem.rotation.y) * 0.05;
@@ -219,12 +187,8 @@ export default function SimpleCosmosLanding() {
       
       // Gentle auto-rotation when not interacting
       if (!isMouseDown) {
-        targetRotationY += 0.0003;
-        targetRotationX += 0.0001;
+        targetRotationY += 0.001;
       }
-      
-      // Update shader time for pulsing stars
-      (material as any).uniforms.time.value = time;
       
       renderer.render(scene, camera);
     }
