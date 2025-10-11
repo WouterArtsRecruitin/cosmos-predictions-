@@ -45,17 +45,33 @@ export default function SimpleCosmosLanding() {
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Create stars
-    const starCount = 8000;
+    // Create globular cluster - dense spherical star distribution
+    const starCount = 15000;
     const geometry = new THREE.BufferGeometry();
     const positions: number[] = [];
     const colors: number[] = [];
     const sizes: number[] = [];
 
-    // Generate star positions in spherical distribution
+    // Generate stars in globular cluster formation
     for (let i = 0; i < starCount; i++) {
-      // Clustered distribution
-      const radius = 20 + Math.random() * 60;
+      let radius, density;
+      
+      // Create dense core and sparse halo
+      if (Math.random() < 0.3) {
+        // Dense core (30% of stars)
+        radius = Math.pow(Math.random(), 2) * 25;
+        density = 1.0;
+      } else if (Math.random() < 0.6) {
+        // Medium density zone (30% of stars)
+        radius = 25 + Math.pow(Math.random(), 1.5) * 35;
+        density = 0.7;
+      } else {
+        // Sparse outer halo (40% of stars)
+        radius = 60 + Math.pow(Math.random(), 0.8) * 40;
+        density = 0.4;
+      }
+      
+      // Spherical coordinates
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
       
@@ -65,17 +81,40 @@ export default function SimpleCosmosLanding() {
       
       positions.push(x, y, z);
 
-      // Star colors
-      const temp = Math.random();
-      if (temp < 0.7) {
-        colors.push(0.9, 0.9, 1.0); // Blue-white
-      } else if (temp < 0.9) {
-        colors.push(1.0, 0.9, 0.7); // Yellow-white
+      // Realistic star colors based on stellar classification
+      const colorRandom = Math.random();
+      let r, g, b;
+      
+      if (colorRandom < 0.02) {
+        // O-type: Blue giants (very rare)
+        r = 0.6; g = 0.8; b = 1.0;
+      } else if (colorRandom < 0.1) {
+        // B-type: Blue-white (rare)
+        r = 0.8; g = 0.9; b = 1.0;
+      } else if (colorRandom < 0.2) {
+        // A-type: White
+        r = 1.0; g = 1.0; b = 1.0;
+      } else if (colorRandom < 0.4) {
+        // F-type: Yellow-white
+        r = 1.0; g = 0.98; b = 0.9;
+      } else if (colorRandom < 0.6) {
+        // G-type: Yellow (like our Sun)
+        r = 1.0; g = 0.95; b = 0.8;
+      } else if (colorRandom < 0.8) {
+        // K-type: Orange
+        r = 1.0; g = 0.85; b = 0.6;
       } else {
-        colors.push(1.0, 0.7, 0.4); // Orange
+        // M-type: Red dwarfs (most common)
+        r = 1.0; g = 0.7; b = 0.4;
       }
+      
+      colors.push(r, g, b);
 
-      sizes.push(0.5 + Math.random() * 2);
+      // Size based on distance from center and stellar type
+      const coreDistance = radius / 100;
+      const baseSize = 0.5 + Math.random() * 1.5;
+      const brightnessBoost = Math.max(0.3, 1 - coreDistance) * density;
+      sizes.push(baseSize * brightnessBoost);
     }
 
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -124,8 +163,48 @@ export default function SimpleCosmosLanding() {
     scene.add(starSystem);
     starSystemRef.current = starSystem;
 
+    // Mouse interaction
+    let mouseX = 0, mouseY = 0;
+    let targetRotationX = 0, targetRotationY = 0;
+    let isMouseDown = false;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const deltaX = event.clientX - mouseX;
+      const deltaY = event.clientY - mouseY;
+      
+      if (isMouseDown) {
+        targetRotationY += deltaX * 0.003;
+        targetRotationX += deltaY * 0.003;
+        targetRotationX = Math.max(-Math.PI/3, Math.min(Math.PI/3, targetRotationX));
+      }
+      
+      mouseX = event.clientX;
+      mouseY = event.clientY;
+    };
+
+    const handleMouseDown = (event: MouseEvent) => {
+      isMouseDown = true;
+      mouseX = event.clientX;
+      mouseY = event.clientY;
+    };
+
+    const handleMouseUp = () => {
+      isMouseDown = false;
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      const zoomFactor = event.deltaY > 0 ? 1.1 : 0.9;
+      camera.position.multiplyScalar(zoomFactor);
+      camera.position.clampLength(30, 200);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('wheel', handleWheel);
+
     // Show form after 1 second
-    setTimeout(() => setShowForm(true), 1000);
+    setTimeout(() => setShowForm(true), 2000);
 
     // Animation loop
     let time = 0;
@@ -133,11 +212,17 @@ export default function SimpleCosmosLanding() {
       animationIdRef.current = requestAnimationFrame(animate);
       time += 0.005;
       
-      // Rotate stars slowly
-      starSystem.rotation.y += 0.0003;
-      starSystem.rotation.x += 0.0001;
+      // Smooth rotation towards target
+      starSystem.rotation.y += (targetRotationY - starSystem.rotation.y) * 0.05;
+      starSystem.rotation.x += (targetRotationX - starSystem.rotation.x) * 0.05;
       
-      // Update shader time
+      // Gentle auto-rotation when not interacting
+      if (!isMouseDown) {
+        targetRotationY += 0.0003;
+        targetRotationX += 0.0001;
+      }
+      
+      // Update shader time for pulsing stars
       (material as any).uniforms.time.value = time;
       
       renderer.render(scene, camera);
@@ -154,6 +239,11 @@ export default function SimpleCosmosLanding() {
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('wheel', handleWheel);
+      
       if (animationIdRef.current) {
         cancelAnimationFrame(animationIdRef.current);
       }
@@ -178,60 +268,68 @@ export default function SimpleCosmosLanding() {
       {/* Cosmos Background */}
       <div ref={containerRef} className="absolute inset-0" />
       
-      {/* Prediction Form */}
+      {/* Subtle UI Overlay */}
       <div 
-        className={`absolute inset-0 flex items-center justify-center z-50 transition-all duration-2000 ${
+        className={`absolute inset-0 z-20 transition-all duration-3000 ${
           showForm ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
-        <div className="max-w-2xl w-full px-6">
-          <form onSubmit={handleSubmit} className="space-y-8">
-            <div className="text-center space-y-4">
-              <div className="text-6xl mb-4">🌌</div>
-              <h1 className="text-4xl md:text-6xl font-light text-white tracking-wide">
+        {/* Floating Question Input */}
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="text-center mb-6">
+              <h1 className="text-2xl md:text-3xl font-light text-white/90 tracking-wide mb-2">
                 Cosmos Predictions
               </h1>
-              <p className="text-xl text-white/70 max-w-lg mx-auto leading-relaxed">
-                Stel je vraag over de toekomst en ontvang AI-gegenereerde scenario's
+              <p className="text-sm text-white/50 max-w-md mx-auto">
+                Vraag de sterren over jouw toekomst
               </p>
             </div>
 
-            <div className="space-y-4">
+            <div className="w-96 max-w-[90vw] space-y-3">
               <input
                 type="text"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                placeholder="Bijv: Wat zijn de kansen dat ik binnen 6 maanden een nieuwe baan vind?"
-                className="w-full px-8 py-5 bg-black/40 backdrop-blur-xl border border-white/20 rounded-2xl text-white placeholder:text-white/40 focus:outline-none focus:border-white/50 transition-colors text-lg"
+                placeholder="Wat houdt de toekomst voor mij in?"
+                className="w-full px-4 py-3 bg-black/20 backdrop-blur-lg border border-white/10 rounded-lg text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-white/30 focus:bg-black/30 transition-all"
                 autoFocus
               />
               
               <button
                 type="submit"
                 disabled={!question.trim()}
-                className="w-full px-8 py-5 bg-white/10 backdrop-blur-xl border border-white/30 rounded-2xl text-white font-light text-lg hover:bg-white/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white/10"
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-lg border border-white/15 rounded-lg text-white/90 text-sm font-light hover:bg-white/10 hover:border-white/25 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-white/5"
               >
-                ✨ Genereer Voorspellingen
+                Voorspel
               </button>
             </div>
-
-            <p className="text-center text-sm text-white/50 leading-relaxed">
-              AI genereert 3 scenario's: optimistisch, realistisch en pessimistisch
-            </p>
           </form>
+        </div>
+
+        {/* Floating Info Labels */}
+        <div className="absolute bottom-20 left-8 text-white/30 text-xs pointer-events-none">
+          <div className="mb-1">Globular Cluster M13</div>
+          <div className="text-white/20">15,000 sterren</div>
+        </div>
+
+        <div className="absolute top-8 right-8 text-white/30 text-xs text-right pointer-events-none">
+          <div className="mb-1 flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-300/60 animate-pulse" />
+            <span>AI Ready</span>
+          </div>
+          <div className="text-white/20">Claude 3.5</div>
+        </div>
+
+        <div className="absolute bottom-20 right-8 text-white/25 text-xs text-right pointer-events-none">
+          <div>Auto-rotatie</div>
+          <div className="text-white/15">0.0003 rad/frame</div>
         </div>
       </div>
 
-      {/* Cosmos Info */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-center text-white/60 pointer-events-none z-40">
-        <div className="text-xs uppercase tracking-wider">8,000 stars</div>
-        <div className="text-sm">Interactive Cosmos</div>
-      </div>
-
-      {/* Status indicator */}
-      <div className="absolute top-6 right-6 bg-black/30 backdrop-blur-lg border border-white/10 rounded-lg px-4 py-2 text-white/50 text-xs flex items-center gap-2 pointer-events-none z-40">
-        <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-        <span>AI Ready</span>
+      {/* Background instruction */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/20 text-xs text-center pointer-events-none z-10">
+        <div>Scroll om in te zoomen • Sleep om te roteren</div>
       </div>
     </div>
   );
