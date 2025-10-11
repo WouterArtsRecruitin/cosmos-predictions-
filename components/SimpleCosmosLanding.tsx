@@ -28,12 +28,12 @@ export default function SimpleCosmosLanding() {
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(
-      45,
+      60,
       window.innerWidth / window.innerHeight,
       0.1,
-      1000
+      2000
     );
-    camera.position.set(0, 0, 100);
+    camera.position.set(0, 0, 80);
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ 
@@ -57,18 +57,18 @@ export default function SimpleCosmosLanding() {
       let radius, density;
       
       // Create dense core and sparse halo
-      if (Math.random() < 0.3) {
-        // Dense core (30% of stars)
-        radius = Math.pow(Math.random(), 2) * 25;
-        density = 1.0;
-      } else if (Math.random() < 0.6) {
+      if (Math.random() < 0.5) {
+        // Dense core (50% of stars)
+        radius = Math.pow(Math.random(), 1.2) * 15;
+        density = 1.5;
+      } else if (Math.random() < 0.8) {
         // Medium density zone (30% of stars)
-        radius = 25 + Math.pow(Math.random(), 1.5) * 35;
-        density = 0.7;
+        radius = 15 + Math.pow(Math.random(), 1.0) * 25;
+        density = 1.0;
       } else {
-        // Sparse outer halo (40% of stars)
-        radius = 60 + Math.pow(Math.random(), 0.8) * 40;
-        density = 0.4;
+        // Sparse outer halo (20% of stars)
+        radius = 40 + Math.pow(Math.random(), 0.6) * 40;
+        density = 0.8;
       }
       
       // Spherical coordinates
@@ -111,9 +111,9 @@ export default function SimpleCosmosLanding() {
       colors.push(r, g, b);
 
       // Size based on distance from center and stellar type
-      const coreDistance = radius / 100;
-      const baseSize = 0.5 + Math.random() * 1.5;
-      const brightnessBoost = Math.max(0.3, 1 - coreDistance) * density;
+      const coreDistance = radius / 75;
+      const baseSize = 1.0 + Math.random() * 2.5;
+      const brightnessBoost = Math.max(0.5, 1.2 - coreDistance) * density;
       sizes.push(baseSize * brightnessBoost);
     }
 
@@ -137,8 +137,8 @@ export default function SimpleCosmosLanding() {
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           
           // Subtle pulsing
-          float pulse = 1.0 + 0.1 * sin(time * 2.0 + position.x * 0.01);
-          gl_PointSize = size * pulse * 100.0 * (300.0 / -mvPosition.z);
+          float pulse = 1.0 + 0.15 * sin(time * 1.5 + position.x * 0.01);
+          gl_PointSize = size * pulse * 200.0 * (400.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -150,7 +150,8 @@ export default function SimpleCosmosLanding() {
           if (dist > 0.5) discard;
           
           float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
-          gl_FragColor = vec4(vColor, alpha * 0.8);
+          alpha = pow(alpha, 0.8); // Make stars brighter
+          gl_FragColor = vec4(vColor, alpha * 1.2);
         }
       `,
       transparent: true,
@@ -193,9 +194,9 @@ export default function SimpleCosmosLanding() {
     };
 
     const handleWheel = (event: WheelEvent) => {
-      const zoomFactor = event.deltaY > 0 ? 1.1 : 0.9;
+      const zoomFactor = event.deltaY > 0 ? 1.05 : 0.95;
       camera.position.multiplyScalar(zoomFactor);
-      camera.position.clampLength(30, 200);
+      camera.position.clampLength(20, 200);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -274,63 +275,31 @@ export default function SimpleCosmosLanding() {
           showForm ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
-        {/* Floating Question Input */}
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2">
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="text-center mb-6">
-              <h1 className="text-2xl md:text-3xl font-light text-white/90 tracking-wide mb-2">
-                Cosmos Predictions
-              </h1>
-              <p className="text-sm text-white/50 max-w-md mx-auto">
-                Vraag de sterren over jouw toekomst
-              </p>
-            </div>
-
-            <div className="w-96 max-w-[90vw] space-y-3">
+        {/* Minimal Question Input */}
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2">
+          <form onSubmit={handleSubmit} className="space-y-2">
+            <div className="w-80 max-w-[85vw]">
               <input
                 type="text"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                placeholder="Wat houdt de toekomst voor mij in?"
-                className="w-full px-4 py-3 bg-black/20 backdrop-blur-lg border border-white/10 rounded-lg text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-white/30 focus:bg-black/30 transition-all"
+                placeholder="Vraag de cosmos over jouw toekomst..."
+                className="w-full px-3 py-2 bg-black/15 backdrop-blur-md border border-white/5 rounded text-white text-sm placeholder:text-white/25 focus:outline-none focus:border-white/20 focus:bg-black/25 transition-all"
                 autoFocus
               />
               
               <button
                 type="submit"
                 disabled={!question.trim()}
-                className="w-full px-4 py-3 bg-white/5 backdrop-blur-lg border border-white/15 rounded-lg text-white/90 text-sm font-light hover:bg-white/10 hover:border-white/25 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-white/5"
+                className="w-full mt-2 px-3 py-2 bg-white/5 backdrop-blur-md border border-white/10 rounded text-white/80 text-xs font-light hover:bg-white/10 transition-all disabled:opacity-20 disabled:cursor-not-allowed"
               >
                 Voorspel
               </button>
             </div>
           </form>
         </div>
-
-        {/* Floating Info Labels */}
-        <div className="absolute bottom-20 left-8 text-white/30 text-xs pointer-events-none">
-          <div className="mb-1">Globular Cluster M13</div>
-          <div className="text-white/20">15,000 sterren</div>
-        </div>
-
-        <div className="absolute top-8 right-8 text-white/30 text-xs text-right pointer-events-none">
-          <div className="mb-1 flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-300/60 animate-pulse" />
-            <span>AI Ready</span>
-          </div>
-          <div className="text-white/20">Claude 3.5</div>
-        </div>
-
-        <div className="absolute bottom-20 right-8 text-white/25 text-xs text-right pointer-events-none">
-          <div>Auto-rotatie</div>
-          <div className="text-white/15">0.0003 rad/frame</div>
-        </div>
       </div>
 
-      {/* Background instruction */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/20 text-xs text-center pointer-events-none z-10">
-        <div>Scroll om in te zoomen • Sleep om te roteren</div>
-      </div>
     </div>
   );
 }
