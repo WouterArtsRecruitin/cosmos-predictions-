@@ -1,5 +1,5 @@
-import MatrixCosmosLanding from '@/components/MatrixCosmosLanding';
+import SimpleCosmosLanding from '@/components/SimpleCosmosLanding';
 
 export default function Home() {
-  return <MatrixCosmosLanding />;
+  return <SimpleCosmosLanding />;
 }
