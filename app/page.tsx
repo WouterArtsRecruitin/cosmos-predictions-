@@ -43,26 +43,26 @@ export default function CosmosVisualization() {
         }
         
         .welcome-text {
-            bottom: 15%;
+            bottom: 5%;
             left: 50%;
             transform: translateX(-50%);
-            color: rgba(255, 255, 255, 0.85);
-            font-size: 18px;
+            color: rgba(255, 255, 255, 0.75);
+            font-size: 14px;
             font-weight: 300;
             text-align: center;
             letter-spacing: 0.5px;
         }
         
         .welcome-text .symbol {
-            margin-bottom: 8px;
-            opacity: 0.6;
-            font-size: 14px;
+            margin-bottom: 6px;
+            opacity: 0.5;
+            font-size: 10px;
         }
         
         .welcome-text .subtitle {
-            font-size: 14px;
-            opacity: 0.5;
-            margin-top: 8px;
+            font-size: 10px;
+            opacity: 0.4;
+            margin-top: 6px;
         }
         
         .status-indicator {
@@ -143,7 +143,7 @@ export default function CosmosVisualization() {
                 this.isDragging = false;
                 this.lastMousePos = { x: 0, y: 0 };
                 this.autoRotate = true;
-                this.rotationSpeed = 0.00015;
+                this.rotationSpeed = 0.0004;
                 
                 this.init();
             }
