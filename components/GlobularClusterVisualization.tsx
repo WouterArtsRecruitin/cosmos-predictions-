@@ -40,16 +40,33 @@ export default function GlobularClusterVisualization() {
 
   const getClusterColor = useCallback((type: string, variation: number): THREE.Color => {
     const colors: Record<string, [number, number, number]> = {
-      mainSequence: [0.94, 0.91, 0.84],
-      coolWhite: [0.90, 0.92, 0.95],
-      warmWhite: [0.96, 0.93, 0.82],
-      subtleBlue: [0.85, 0.90, 0.98],
-      lightPurple: [0.90, 0.86, 0.95],
-      subtleOrange: [0.95, 0.86, 0.72],
-      deepOrange: [0.92, 0.78, 0.65],
-      faintRed: [0.89, 0.82, 0.78],
-      faintPink: [0.92, 0.89, 0.91],
-      neutralGray: [0.88, 0.88, 0.90]
+      // Heldere blauwe reuzen (O/B type)
+      blueGiant: [0.62, 0.73, 0.95],
+      brightBlue: [0.55, 0.68, 0.92],
+
+      // Witte/gele hoofdreeks sterren (A/F type)
+      mainSequence: [0.88, 0.87, 0.78],
+      warmWhite: [0.92, 0.89, 0.75],
+      paleYellow: [0.96, 0.91, 0.68],
+
+      // Oranje sterren (K type)
+      deepOrange: [0.95, 0.72, 0.45],
+      paleOrange: [0.92, 0.78, 0.58],
+      amber: [0.98, 0.65, 0.35],
+
+      // Rode sterren (M type - rode dwergen)
+      redDwarf: [0.92, 0.52, 0.38],
+      deepRed: [0.85, 0.45, 0.35],
+      darkRed: [0.78, 0.38, 0.32],
+
+      // Gedimde/oude sterren
+      fadedOrange: [0.82, 0.68, 0.52],
+      dimYellow: [0.85, 0.78, 0.58],
+      neutralGray: [0.70, 0.72, 0.75],
+
+      // Subtiele tinten voor achtergrond sterren
+      faintBlue: [0.58, 0.62, 0.72],
+      dustyRose: [0.75, 0.58, 0.55]
     };
 
     const baseColor = colors[type] || [1.0, 1.0, 1.0];
@@ -106,68 +123,100 @@ export default function GlobularClusterVisualization() {
       const random = Math.random();
 
       if (pos.region === 'core') {
-        if (random < 0.35) {
-          color = getClusterColor('mainSequence', Math.random() * 0.12 - 0.06);
-          size = 0.003 + Math.pow(Math.random(), 1.8) * 0.012;
-          starType = 'mainSequence';
-          brightness = 0.35 + Math.random() * 0.35;
-        } else if (random < 0.55) {
-          color = getClusterColor('subtleOrange', Math.random() * 0.1 - 0.05);
-          size = 0.004 + Math.pow(Math.random(), 1.5) * 0.015;
-          starType = 'subtleOrange';
-          brightness = 0.4 + Math.random() * 0.35;
-        } else if (random < 0.70) {
-          color = getClusterColor('warmWhite', Math.random() * 0.08 - 0.04);
-          size = 0.003 + Math.pow(Math.random(), 1.8) * 0.012;
-          starType = 'warmWhite';
-          brightness = 0.35 + Math.random() * 0.3;
-        } else if (random < 0.80) {
-          color = getClusterColor('deepOrange', Math.random() * 0.08 - 0.04);
+        // Kern: mix van alle stertypen, realistischer verdeling
+        if (random < 0.05) {
+          // Zeldzame blauwe reuzen (helderste sterren)
+          color = getClusterColor('blueGiant', Math.random() * 0.1 - 0.05);
+          size = 0.006 + Math.pow(Math.random(), 1.3) * 0.018;
+          starType = 'blueGiant';
+          brightness = 0.7 + Math.random() * 0.3;
+        } else if (random < 0.12) {
+          // Heldere blauwe sterren
+          color = getClusterColor('brightBlue', Math.random() * 0.08 - 0.04);
+          size = 0.005 + Math.pow(Math.random(), 1.5) * 0.015;
+          starType = 'brightBlue';
+          brightness = 0.6 + Math.random() * 0.25;
+        } else if (random < 0.25) {
+          // Gele/witte hoofdreeks (zonachtige sterren)
+          color = getClusterColor('paleYellow', Math.random() * 0.1 - 0.05);
+          size = 0.004 + Math.pow(Math.random(), 1.6) * 0.013;
+          starType = 'paleYellow';
+          brightness = 0.45 + Math.random() * 0.3;
+        } else if (random < 0.40) {
+          // Witte hoofdreeks sterren
+          color = getClusterColor('mainSequence', Math.random() * 0.08 - 0.04);
           size = 0.003 + Math.pow(Math.random(), 1.7) * 0.012;
+          starType = 'mainSequence';
+          brightness = 0.4 + Math.random() * 0.3;
+        } else if (random < 0.60) {
+          // Oranje sterren (veel voorkomend in oude clusters)
+          color = getClusterColor('deepOrange', Math.random() * 0.1 - 0.05);
+          size = 0.003 + Math.pow(Math.random(), 1.6) * 0.013;
           starType = 'deepOrange';
-          brightness = 0.28 + Math.random() * 0.32;
+          brightness = 0.35 + Math.random() * 0.3;
+        } else if (random < 0.75) {
+          // Amber/goudkleurige sterren
+          color = getClusterColor('amber', Math.random() * 0.09 - 0.045);
+          size = 0.003 + Math.pow(Math.random(), 1.7) * 0.011;
+          starType = 'amber';
+          brightness = 0.32 + Math.random() * 0.28;
         } else if (random < 0.88) {
-          color = getClusterColor('faintRed', Math.random() * 0.07 - 0.035);
-          size = 0.002 + Math.pow(Math.random(), 1.8) * 0.012;
-          starType = 'faintRed';
-          brightness = 0.26 + Math.random() * 0.30;
-        } else if (random < 0.92) {
-          color = getClusterColor('coolWhite', Math.random() * 0.06 - 0.03);
-          size = 0.002 + Math.pow(Math.random(), 2.0) * 0.009;
-          starType = 'coolWhite';
-          brightness = 0.28 + Math.random() * 0.28;
-        } else if (random < 0.94) {
-          color = getClusterColor('subtleBlue', Math.random() * 0.06 - 0.03);
+          // Rode dwergen (meest voorkomend)
+          color = getClusterColor('redDwarf', Math.random() * 0.08 - 0.04);
           size = 0.002 + Math.pow(Math.random(), 2.0) * 0.010;
-          starType = 'subtleBlue';
-          brightness = 0.24 + Math.random() * 0.28;
-        } else if (random < 0.97) {
-          color = getClusterColor('lightPurple', Math.random() * 0.05 - 0.025);
-          size = 0.002 + Math.pow(Math.random(), 1.9) * 0.009;
-          starType = 'lightPurple';
-          brightness = 0.22 + Math.random() * 0.26;
+          starType = 'redDwarf';
+          brightness = 0.28 + Math.random() * 0.25;
+        } else if (random < 0.95) {
+          // Diep rode sterren
+          color = getClusterColor('deepRed', Math.random() * 0.07 - 0.035);
+          size = 0.002 + Math.pow(Math.random(), 2.1) * 0.009;
+          starType = 'deepRed';
+          brightness = 0.22 + Math.random() * 0.22;
         } else {
-          color = getClusterColor('faintPink', Math.random() * 0.04 - 0.02);
-          size = 0.002 + Math.pow(Math.random(), 1.9) * 0.009;
-          starType = 'faintPink';
-          brightness = 0.2 + Math.random() * 0.23;
+          // Donkere rode dwergen
+          color = getClusterColor('darkRed', Math.random() * 0.06 - 0.03);
+          size = 0.002 + Math.pow(Math.random(), 2.2) * 0.008;
+          starType = 'darkRed';
+          brightness = 0.18 + Math.random() * 0.20;
         }
       } else {
-        if (random < 0.40) {
-          color = getClusterColor('neutralGray', Math.random() * 0.08 - 0.04);
-          size = 0.002 + Math.pow(Math.random(), 2.5) * 0.007;
-          starType = 'neutralGray';
-          brightness = 0.18 + Math.random() * 0.22;
-        } else if (random < 0.65) {
-          color = getClusterColor('mainSequence', Math.random() * 0.09 - 0.045);
-          size = 0.002 + Math.pow(Math.random(), 2.1) * 0.009;
-          starType = 'mainSequence';
-          brightness = 0.2 + Math.random() * 0.28;
+        // Halo: voornamelijk oudere, zwakkere sterren
+        if (random < 0.08) {
+          // Enkele blauwe stragglers
+          color = getClusterColor('faintBlue', Math.random() * 0.08 - 0.04);
+          size = 0.002 + Math.pow(Math.random(), 2.2) * 0.008;
+          starType = 'faintBlue';
+          brightness = 0.25 + Math.random() * 0.20;
+        } else if (random < 0.25) {
+          // Gedimde oranje sterren
+          color = getClusterColor('fadedOrange', Math.random() * 0.07 - 0.035);
+          size = 0.002 + Math.pow(Math.random(), 2.3) * 0.008;
+          starType = 'fadedOrange';
+          brightness = 0.20 + Math.random() * 0.22;
+        } else if (random < 0.45) {
+          // Gedimde gele sterren
+          color = getClusterColor('dimYellow', Math.random() * 0.08 - 0.04);
+          size = 0.002 + Math.pow(Math.random(), 2.2) * 0.009;
+          starType = 'dimYellow';
+          brightness = 0.22 + Math.random() * 0.24;
+        } else if (random < 0.70) {
+          // Rode dwergen (dominant in halo)
+          color = getClusterColor('redDwarf', Math.random() * 0.07 - 0.035);
+          size = 0.002 + Math.pow(Math.random(), 2.4) * 0.007;
+          starType = 'redDwarf';
+          brightness = 0.18 + Math.random() * 0.20;
+        } else if (random < 0.85) {
+          // Donkere rode sterren
+          color = getClusterColor('darkRed', Math.random() * 0.06 - 0.03);
+          size = 0.001 + Math.pow(Math.random(), 2.5) * 0.007;
+          starType = 'darkRed';
+          brightness = 0.15 + Math.random() * 0.18;
         } else {
-          color = getClusterColor('coolWhite', Math.random() * 0.07 - 0.035);
-          size = 0.002 + Math.pow(Math.random(), 1.9) * 0.008;
-          starType = 'coolWhite';
-          brightness = 0.22 + Math.random() * 0.25;
+          // Zwakke grijze sterren
+          color = getClusterColor('neutralGray', Math.random() * 0.06 - 0.03);
+          size = 0.001 + Math.pow(Math.random(), 2.5) * 0.006;
+          starType = 'neutralGray';
+          brightness = 0.12 + Math.random() * 0.15;
         }
       }
 
