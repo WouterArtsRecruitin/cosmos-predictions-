@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useState, Suspense, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import CosmosBackground from '@/components/CosmosBackground';
 import type { PredictionResult, PredictionScenario } from '@/lib/claude';
@@ -89,23 +89,23 @@ function PredictionsContent() {
 
   if (!result) return null;
 
-  const getScenarioColor = (scenario: string) => {
+  const getScenarioColor = useCallback((scenario: string) => {
     switch (scenario) {
       case 'optimistic': return 'from-green-500/20 to-emerald-500/20 border-green-500/30';
       case 'realistic': return 'from-blue-500/20 to-cyan-500/20 border-blue-500/30';
       case 'pessimistic': return 'from-orange-500/20 to-red-500/20 border-orange-500/30';
       default: return 'from-white/10 to-white/5 border-white/20';
     }
-  };
+  }, []);
 
-  const getScenarioIcon = (scenario: string) => {
+  const getScenarioIcon = useCallback((scenario: string) => {
     switch (scenario) {
       case 'optimistic': return '🌟';
       case 'realistic': return '🎯';
       case 'pessimistic': return '⚡';
       default: return '•';
     }
-  };
+  }, []);
 
   return (
     <div className="absolute inset-0 overflow-y-auto z-30 py-8 px-4">
@@ -148,19 +148,14 @@ function PredictionsContent() {
   );
 }
 
-function ScenarioCard({ 
-  scenario, 
-  getColor, 
-  getIcon,
-  index
-}: { 
+const ScenarioCard = React.memo<{
   scenario: PredictionScenario;
   getColor: (s: string) => string;
   getIcon: (s: string) => string;
   index: number;
-}) {
+}>(function ScenarioCard({ scenario, getColor, getIcon, index }) {
   return (
-    <div 
+    <div
       className={`bg-gradient-to-br ${getColor(scenario.scenario)} backdrop-blur-lg border rounded-xl p-5 space-y-3 transition-all duration-500 hover:scale-[1.02] hover:backdrop-blur-xl`}
       style={{
         animationDelay: `${index * 0.2}s`,
@@ -217,7 +212,7 @@ function ScenarioCard({
       </div>
     </div>
   );
-}
+});
 
 export default function PredictionsPage() {
   return (
