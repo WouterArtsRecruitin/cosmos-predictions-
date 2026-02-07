@@ -61,6 +61,7 @@ export default function ParticleGestureSystem() {
   const [gestureInfo, setGestureInfo] = useState('');
   const [transitionMode, setTransitionMode] = useState<TransitionMode>('explode');
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [captureFlash, setCaptureFlash] = useState(false);
 
   const gestureScaleRef = useRef(1.0);
   const gestureRotXRef = useRef(0);
@@ -174,6 +175,29 @@ export default function ParticleGestureSystem() {
     p.origin.set(0, 0, 0);
   }, []);
 
+  // Capture screenshot from WebGL canvas
+  const captureScreenshot = useCallback(() => {
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    if (!renderer || !scene || !camera) return;
+
+    // Render one clean frame
+    renderer.render(scene, camera);
+    const dataUrl = renderer.domElement.toDataURL('image/png');
+
+    // Trigger download
+    const link = document.createElement('a');
+    link.download = `cosmos-particles-${Date.now()}.png`;
+    link.href = dataUrl;
+    link.click();
+
+    // Flash effect
+    setCaptureFlash(true);
+    firePulse(0.5);
+    setTimeout(() => setCaptureFlash(false), 300);
+  }, [firePulse]);
+
   // ─── Main Three.js setup ────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return;
@@ -192,7 +216,7 @@ export default function ParticleGestureSystem() {
     cameraRef.current = camera;
 
     // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance', preserveDrawingBuffer: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
@@ -891,7 +915,7 @@ export default function ParticleGestureSystem() {
       </div>
 
       {/* Bottom status bar */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
+      <div className="absolute bottom-14 left-0 right-0 z-10 pointer-events-none">
         <div className="flex items-center justify-between px-5 py-4">
           <div className="text-white/30 text-xs">
             {PARTICLE_COUNT.toLocaleString()} deeltjes \u2022{' '}
@@ -909,16 +933,27 @@ export default function ParticleGestureSystem() {
         </div>
       </div>
 
-      {/* Back link */}
-      <a
-        href="/"
-        className="absolute top-5 left-5 z-30 text-white/30 hover:text-white/60 transition-colors text-xs flex items-center gap-1.5"
+      {/* Screenshot button */}
+      <button
+        onClick={captureScreenshot}
+        className="absolute top-5 left-5 z-30 flex items-center gap-2 px-3 py-2 rounded-lg
+          bg-black/30 backdrop-blur-xl border border-white/10 text-white/40
+          hover:bg-black/40 hover:text-white/70 hover:border-white/20
+          transition-all duration-200 group"
+        title="Screenshot opslaan"
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <polyline points="15 18 9 12 15 6" />
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="group-hover:scale-110 transition-transform">
+          <rect x="3" y="3" width="18" height="18" rx="3" />
+          <circle cx="12" cy="12" r="4" />
+          <circle cx="17.5" cy="6.5" r="1" fill="currentColor" />
         </svg>
-        Terug
-      </a>
+        <span className="text-xs">Capture</span>
+      </button>
+
+      {/* Flash overlay for screenshot */}
+      {captureFlash && (
+        <div className="absolute inset-0 z-40 bg-white/20 pointer-events-none animate-ping" style={{ animationDuration: '0.3s', animationIterationCount: 1 }} />
+      )}
     </div>
   );
 }
