@@ -68,8 +68,10 @@ export default function ParticleGestureSystem() {
   const gestureRotYRef = useRef(0);
   const prevHandsRef = useRef(0);
   const transitionModeRef = useRef<TransitionMode>('explode');
+  const gestureRef = useRef<ReturnType<typeof useHandGesture>>(null!);
 
   const gesture = useHandGesture(cameraEnabled);
+  gestureRef.current = gesture;
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -667,15 +669,21 @@ export default function ParticleGestureSystem() {
       }
 
       // ── Gesture-based rotation ──
-      if (gesture.handsDetected > 0) {
-        const targetRotY = (gesture.centerX - 0.5) * Math.PI * 0.5;
-        const targetRotX = (gesture.centerY - 0.5) * Math.PI * 0.3;
+      const g = gestureRef.current;
+      if (g.handsDetected > 0) {
+        const targetRotY = (g.centerX - 0.5) * Math.PI * 0.5;
+        const targetRotX = (g.centerY - 0.5) * Math.PI * 0.3;
         gestureRotYRef.current += (targetRotY - gestureRotYRef.current) * 0.05;
         gestureRotXRef.current += (targetRotX - gestureRotXRef.current) * 0.05;
+
+        particles.rotation.y = gestureRotYRef.current;
+        particles.rotation.x = gestureRotXRef.current;
+        trailPoints.rotation.y = particles.rotation.y;
+        trailPoints.rotation.x = particles.rotation.x;
       }
 
       // ── Auto rotation ──
-      if (autoRotate && !isDragging && gesture.handsDetected === 0) {
+      if (autoRotate && !isDragging && g.handsDetected === 0) {
         particles.rotation.y += 0.001;
         particles.rotation.x += 0.0002;
         trailPoints.rotation.y = particles.rotation.y;
