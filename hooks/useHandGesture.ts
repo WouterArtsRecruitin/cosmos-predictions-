@@ -150,7 +150,7 @@ export function useHandGesture(enabled: boolean = true) {
 
         const hands = new Hands({
           locateFile: (file: string) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
           },
         });
 

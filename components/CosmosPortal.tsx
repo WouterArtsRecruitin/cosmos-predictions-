@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 
-const STAR_COUNT = 8000;
-const NEBULA_COUNT = 2000;
+const TOTAL_STARS = 55000;
+const CORE_RADIUS = 15;
+const HALO_RADIUS = 45;
 
 export default function CosmosPortal() {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -35,77 +36,132 @@ export default function CosmosPortal() {
     if (!canvasRef.current) return;
     const container = canvasRef.current;
 
+    // ── Same setup as original GlobularClusterVisualization ──
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x020210);
+    scene.background = new THREE.Color(0x000000);
 
-    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
-    camera.position.set(0, 0, 30);
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 90);
+    camera.lookAt(0, 0, 0);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
 
-    // ── Star field ──
-    const starGeometry = new THREE.BufferGeometry();
-    const starPositions = new Float32Array(STAR_COUNT * 3);
-    const starColors = new Float32Array(STAR_COUNT * 3);
-    const starSizes = new Float32Array(STAR_COUNT);
+    // ── Star colors (matching original stellar types) ──
+    const clusterColors: Record<string, [number, number, number]> = {
+      blueGiant: [0.62, 0.73, 0.95],
+      brightBlue: [0.55, 0.68, 0.92],
+      mainSequence: [0.88, 0.87, 0.78],
+      paleYellow: [0.96, 0.91, 0.68],
+      deepOrange: [0.95, 0.72, 0.45],
+      amber: [0.98, 0.65, 0.35],
+      redDwarf: [0.92, 0.52, 0.38],
+      deepRed: [0.85, 0.45, 0.35],
+      darkRed: [0.78, 0.38, 0.32],
+      faintBlue: [0.58, 0.62, 0.72],
+      fadedOrange: [0.82, 0.68, 0.52],
+      dimYellow: [0.85, 0.78, 0.58],
+      neutralGray: [0.70, 0.72, 0.75],
+    };
 
-    for (let i = 0; i < STAR_COUNT; i++) {
-      const i3 = i * 3;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      const r = 20 + Math.random() * 60;
-
-      starPositions[i3] = r * Math.sin(phi) * Math.cos(theta);
-      starPositions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-      starPositions[i3 + 2] = r * Math.cos(phi) - 30;
-
-      // Warm whites and subtle blues
-      const temp = Math.random();
-      if (temp < 0.6) {
-        starColors[i3] = 0.85 + Math.random() * 0.15;
-        starColors[i3 + 1] = 0.85 + Math.random() * 0.12;
-        starColors[i3 + 2] = 0.9 + Math.random() * 0.1;
-      } else if (temp < 0.85) {
-        starColors[i3] = 0.6 + Math.random() * 0.15;
-        starColors[i3 + 1] = 0.7 + Math.random() * 0.15;
-        starColors[i3 + 2] = 0.95;
+    function pickColor(region: string, rng: number): [number, number, number] {
+      const v = (Math.random() - 0.5) * 0.08;
+      let base: [number, number, number];
+      if (region === 'core') {
+        if (rng < 0.05) base = clusterColors.blueGiant;
+        else if (rng < 0.12) base = clusterColors.brightBlue;
+        else if (rng < 0.25) base = clusterColors.paleYellow;
+        else if (rng < 0.40) base = clusterColors.mainSequence;
+        else if (rng < 0.60) base = clusterColors.deepOrange;
+        else if (rng < 0.75) base = clusterColors.amber;
+        else if (rng < 0.88) base = clusterColors.redDwarf;
+        else if (rng < 0.95) base = clusterColors.deepRed;
+        else base = clusterColors.darkRed;
       } else {
-        starColors[i3] = 0.95;
-        starColors[i3 + 1] = 0.8 + Math.random() * 0.1;
-        starColors[i3 + 2] = 0.5 + Math.random() * 0.2;
+        if (rng < 0.08) base = clusterColors.faintBlue;
+        else if (rng < 0.25) base = clusterColors.fadedOrange;
+        else if (rng < 0.45) base = clusterColors.dimYellow;
+        else if (rng < 0.70) base = clusterColors.redDwarf;
+        else if (rng < 0.85) base = clusterColors.darkRed;
+        else base = clusterColors.neutralGray;
       }
-
-      starSizes[i] = 0.3 + Math.random() * 1.2;
+      return [
+        Math.max(0, Math.min(1, base[0] + v)),
+        Math.max(0, Math.min(1, base[1] + v * 0.7)),
+        Math.max(0, Math.min(1, base[2] + v * 0.5)),
+      ];
     }
 
-    starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
-    starGeometry.setAttribute('color', new THREE.Float32BufferAttribute(starColors, 3));
-    starGeometry.setAttribute('size', new THREE.Float32BufferAttribute(starSizes, 1));
+    // ── Generate globular cluster (same distribution as original) ──
+    const positions = new Float32Array(TOTAL_STARS * 3);
+    const colors = new Float32Array(TOTAL_STARS * 3);
+    const sizes = new Float32Array(TOTAL_STARS);
+    const alphas = new Float32Array(TOTAL_STARS);
 
+    const coreCount = Math.floor(TOTAL_STARS * 0.2);
+
+    for (let i = 0; i < TOTAL_STARS; i++) {
+      const i3 = i * 3;
+      const isCore = i < coreCount;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      let r: number;
+
+      if (isCore) {
+        r = Math.pow(Math.random(), 0.5) * CORE_RADIUS;
+      } else {
+        r = CORE_RADIUS + Math.pow(Math.random(), 1.2) * (HALO_RADIUS - CORE_RADIUS);
+      }
+
+      positions[i3] = r * Math.sin(phi) * Math.cos(theta);
+      positions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      positions[i3 + 2] = r * Math.cos(phi);
+
+      const rng = Math.random();
+      const region = isCore ? 'core' : 'halo';
+      const [cr, cg, cb] = pickColor(region, rng);
+      colors[i3] = cr;
+      colors[i3 + 1] = cg;
+      colors[i3 + 2] = cb;
+
+      // Same size ranges as original (tiny values, big basePointSize in shader)
+      if (isCore) {
+        sizes[i] = 0.003 + Math.pow(Math.random(), 1.5) * 0.015;
+        alphas[i] = 0.3 + Math.random() * 0.4;
+      } else {
+        sizes[i] = 0.001 + Math.pow(Math.random(), 2.2) * 0.008;
+        alphas[i] = 0.12 + Math.random() * 0.22;
+      }
+
+      // Distance-based brightness falloff
+      const distRatio = r / HALO_RADIUS;
+      alphas[i] *= (1.2 - distRatio * 0.4);
+    }
+
+    const starGeometry = new THREE.BufferGeometry();
+    starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    starGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    starGeometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+    starGeometry.setAttribute('alpha', new THREE.Float32BufferAttribute(alphas, 1));
+
+    // Same shader as original GlobularClusterVisualization
     const starMaterial = new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
-      },
+      uniforms: {},
       vertexShader: `
-        uniform float uTime;
-        uniform float uPixelRatio;
         attribute float size;
+        attribute float alpha;
         attribute vec3 color;
         varying vec3 vColor;
         varying float vAlpha;
 
         void main() {
           vColor = color;
-          vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-          float dist = -mvPos.z;
-          gl_PointSize = size * uPixelRatio * (80.0 / dist);
-          gl_Position = projectionMatrix * mvPos;
-          float twinkle = 0.7 + 0.3 * sin(uTime * 1.5 + position.x * 10.0 + position.y * 7.0);
-          vAlpha = smoothstep(100.0, 10.0, dist) * twinkle;
+          vAlpha = alpha;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = size * 200.0 * (400.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
         }
       `,
       fragmentShader: `
@@ -113,122 +169,38 @@ export default function CosmosPortal() {
         varying float vAlpha;
 
         void main() {
-          float d = length(gl_PointCoord - 0.5);
-          float alpha = 1.0 - smoothstep(0.0, 0.5, d);
-          alpha *= alpha * vAlpha;
-          if (alpha < 0.01) discard;
-          float core = exp(-d * 10.0) * 0.3;
-          gl_FragColor = vec4(vColor + core, alpha);
+          vec2 center = gl_PointCoord - 0.5;
+          float dist = length(center);
+          float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
+          alpha *= vAlpha;
+          if (alpha < 0.08) discard;
+          gl_FragColor = vec4(vColor * vAlpha, alpha);
         }
       `,
       transparent: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      blending: THREE.NormalBlending,
     });
 
     const stars = new THREE.Points(starGeometry, starMaterial);
     scene.add(stars);
 
-    // ── Central nebula glow ──
-    const nebulaGeometry = new THREE.BufferGeometry();
-    const nebulaPositions = new Float32Array(NEBULA_COUNT * 3);
-    const nebulaSizes = new Float32Array(NEBULA_COUNT);
-    const nebulaRandoms = new Float32Array(NEBULA_COUNT);
-
-    for (let i = 0; i < NEBULA_COUNT; i++) {
-      const i3 = i * 3;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      const r = Math.pow(Math.random(), 0.6) * 12;
-
-      nebulaPositions[i3] = r * Math.sin(phi) * Math.cos(theta);
-      nebulaPositions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta) * 0.6;
-      nebulaPositions[i3 + 2] = r * Math.cos(phi) * 0.4;
-
-      nebulaSizes[i] = 2.0 + Math.random() * 6.0;
-      nebulaRandoms[i] = Math.random();
-    }
-
-    nebulaGeometry.setAttribute('position', new THREE.Float32BufferAttribute(nebulaPositions, 3));
-    nebulaGeometry.setAttribute('size', new THREE.Float32BufferAttribute(nebulaSizes, 1));
-    nebulaGeometry.setAttribute('aRandom', new THREE.Float32BufferAttribute(nebulaRandoms, 1));
-
-    const nebulaMaterial = new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
-      },
-      vertexShader: `
-        uniform float uTime;
-        uniform float uPixelRatio;
-        attribute float size;
-        attribute float aRandom;
-        varying float vAlpha;
-        varying float vRandom;
-
-        void main() {
-          vRandom = aRandom;
-          vec3 pos = position;
-          pos.x += sin(uTime * 0.15 + aRandom * 6.28) * 0.3;
-          pos.y += cos(uTime * 0.12 + aRandom * 4.71) * 0.2;
-
-          vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
-          float dist = -mvPos.z;
-          gl_PointSize = size * uPixelRatio * (80.0 / dist);
-          gl_Position = projectionMatrix * mvPos;
-          vAlpha = smoothstep(60.0, 5.0, dist) * 0.06;
-        }
-      `,
-      fragmentShader: `
-        varying float vAlpha;
-        varying float vRandom;
-
-        void main() {
-          float d = length(gl_PointCoord - 0.5);
-          float alpha = 1.0 - smoothstep(0.0, 0.5, d);
-          alpha *= vAlpha;
-          if (alpha < 0.002) discard;
-
-          // Purple/blue nebula tones
-          vec3 color = mix(
-            vec3(0.15, 0.08, 0.35),
-            vec3(0.08, 0.15, 0.4),
-            vRandom
-          );
-          color += vec3(0.1, 0.02, 0.08) * (1.0 - d);
-
-          gl_FragColor = vec4(color, alpha);
-        }
-      `,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-
-    const nebula = new THREE.Points(nebulaGeometry, nebulaMaterial);
-    scene.add(nebula);
-
     // ── Animation ──
-    const clock = new THREE.Clock();
     let animId: number;
 
     const animate = () => {
       animId = requestAnimationFrame(animate);
-      const elapsed = clock.getElapsedTime();
 
-      starMaterial.uniforms.uTime.value = elapsed;
-      nebulaMaterial.uniforms.uTime.value = elapsed;
+      // Slow auto-rotation (same speed as original)
+      stars.rotation.y += 0.00015;
+      stars.rotation.x += 0.00015 * 0.2;
 
-      // Parallax from mouse
+      // Subtle mouse parallax on camera
       const mx = mouseRef.current.x;
       const my = mouseRef.current.y;
-      camera.position.x += (mx * 2 - camera.position.x) * 0.02;
-      camera.position.y += (-my * 1.5 - camera.position.y) * 0.02;
+      camera.position.x += (mx * 3 - camera.position.x) * 0.015;
+      camera.position.y += (-my * 2 - camera.position.y) * 0.015;
       camera.lookAt(0, 0, 0);
-
-      stars.rotation.y += 0.00008;
-      nebula.rotation.y += 0.0002;
-      nebula.rotation.z += 0.00005;
 
       renderer.render(scene, camera);
     };
@@ -238,9 +210,6 @@ export default function CosmosPortal() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-      const pr = Math.min(window.devicePixelRatio, 2);
-      starMaterial.uniforms.uPixelRatio.value = pr;
-      nebulaMaterial.uniforms.uPixelRatio.value = pr;
     };
     window.addEventListener('resize', handleResize);
 
@@ -249,8 +218,6 @@ export default function CosmosPortal() {
       window.removeEventListener('resize', handleResize);
       starGeometry.dispose();
       starMaterial.dispose();
-      nebulaGeometry.dispose();
-      nebulaMaterial.dispose();
       renderer.dispose();
       if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
     };
