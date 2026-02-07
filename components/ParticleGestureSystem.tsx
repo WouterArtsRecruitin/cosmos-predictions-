@@ -4,12 +4,13 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { useHandGesture, HAND_CONNECTIONS, HandLandmark } from '@/hooks/useHandGesture';
 import { PARTICLE_TEMPLATES, PRESET_COLORS } from '@/lib/particleTemplates';
+import { generateStarCatalog } from '@/lib/starCatalog';
 
-const PARTICLE_COUNT = 25000;
-const TRAIL_LENGTH = 6;
+const PARTICLE_COUNT = 55000;
+const TRAIL_LENGTH = 2;
 const TRAIL_PARTICLE_COUNT = PARTICLE_COUNT * TRAIL_LENGTH;
-const BASE_SCALE = 3.0;
-const LERP_SPEED = 0.03;
+const BASE_SCALE = 15;       // matches original CORE_RADIUS=15, HALO_RADIUS=45
+const LERP_SPEED = 0.06;     // faster response for gesture control
 
 type TransitionMode = 'morph' | 'explode' | 'vortex';
 
@@ -71,18 +72,24 @@ export default function ParticleGestureSystem() {
   const gestureRotYRef = useRef(0);
   const prevHandsRef = useRef(0);
   const transitionModeRef = useRef<TransitionMode>('explode');
-  const gestureRef = useRef({ handsDetected: 0, centerX: 0.5, centerY: 0.5 });
+  const gestureRef = useRef({
+    handsDetected: 0, centerX: 0.5, centerY: 0.5,
+    scale: 1.0, openness: 0, distance: 0.5,
+  });
 
   const gesture = useHandGesture(cameraEnabled);
 
-  // Keep gesture ref in sync for animation loop access
+  // Keep gesture ref in sync for animation loop access (ALL gesture data)
   useEffect(() => {
     gestureRef.current = {
       handsDetected: gesture.handsDetected,
       centerX: gesture.centerX,
       centerY: gesture.centerY,
+      scale: gesture.scale,
+      openness: gesture.averageOpenness,
+      distance: gesture.distance,
     };
-  }, [gesture.handsDetected, gesture.centerX, gesture.centerY]);
+  }, [gesture.handsDetected, gesture.centerX, gesture.centerY, gesture.scale, gesture.averageOpenness, gesture.distance]);
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -149,10 +156,11 @@ export default function ParticleGestureSystem() {
     triggerTransition(positions);
   }, [triggerTransition]);
 
-  // Update particle color
+  // Update particle tint color (blends with star catalog colors)
   const updateColor = useCallback((rgb: number[]) => {
     if (materialRef.current) {
-      materialRef.current.uniforms.uColor.value.set(rgb[0], rgb[1], rgb[2]);
+      materialRef.current.uniforms.uTintColor.value.set(rgb[0], rgb[1], rgb[2]);
+      materialRef.current.uniforms.uTintAmount.value = 0.55; // blend tint with star colors
     }
     if (trailMaterialRef.current) {
       trailMaterialRef.current.uniforms.uColor.value.set(rgb[0], rgb[1], rgb[2]);
@@ -216,15 +224,14 @@ export default function ParticleGestureSystem() {
     if (!containerRef.current) return;
     const container = containerRef.current;
 
-    // Scene
+    // Scene (matches original cosmos - pure black, no fog)
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x030308);
-    scene.fog = new THREE.FogExp2(0x030308, 0.012);
+    scene.background = new THREE.Color(0x000000);
     sceneRef.current = scene;
 
-    // Camera
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 500);
-    camera.position.set(0, 0, 8);
+    // Camera (matches original: FOV=45, z=90)
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 90);
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
@@ -235,30 +242,33 @@ export default function ParticleGestureSystem() {
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // ── Main particles ──
+    // ── Main particles (55k with original cosmos star catalog) ──
     const initialPositions = PARTICLE_TEMPLATES[0].generate(PARTICLE_COUNT, BASE_SCALE);
     currentPositionsRef.current = new Float32Array(initialPositions);
     targetPositionsRef.current = new Float32Array(initialPositions);
     velocitiesRef.current = new Float32Array(PARTICLE_COUNT * 3);
 
+    // Generate star catalog colors/sizes (same as original GlobularCluster)
+    const catalog = generateStarCatalog(PARTICLE_COUNT);
+
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(currentPositionsRef.current, 3));
+    geometry.setAttribute('aColor', new THREE.Float32BufferAttribute(catalog.colors, 3));
+    geometry.setAttribute('aSize', new THREE.Float32BufferAttribute(catalog.sizes, 1));
+    geometry.setAttribute('aBrightness', new THREE.Float32BufferAttribute(catalog.brightnesses, 1));
 
     const randoms = new Float32Array(PARTICLE_COUNT);
-    const sizes = new Float32Array(PARTICLE_COUNT);
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       randoms[i] = Math.random();
-      sizes[i] = 0.5 + Math.random() * 1.5;
     }
     geometry.setAttribute('aRandom', new THREE.Float32BufferAttribute(randoms, 1));
-    geometry.setAttribute('aSize', new THREE.Float32BufferAttribute(sizes, 1));
 
     const material = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uColor: { value: new THREE.Vector3(PRESET_COLORS[0].rgb[0], PRESET_COLORS[0].rgb[1], PRESET_COLORS[0].rgb[2]) },
+        uTintColor: { value: new THREE.Vector3(PRESET_COLORS[0].rgb[0], PRESET_COLORS[0].rgb[1], PRESET_COLORS[0].rgb[2]) },
+        uTintAmount: { value: 0.0 },  // 0 = star colors, 1 = full tint
         uScale: { value: 1.0 },
-        uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
         uExplosion: { value: 0.0 },
         uPulse: { value: 0.0 },
         uPulseRadius: { value: 0.0 },
@@ -266,94 +276,84 @@ export default function ParticleGestureSystem() {
       vertexShader: `
         uniform float uTime;
         uniform float uScale;
-        uniform float uPixelRatio;
         uniform float uExplosion;
         uniform float uPulse;
         uniform float uPulseRadius;
-        attribute float aRandom;
+        attribute vec3 aColor;
         attribute float aSize;
+        attribute float aBrightness;
+        attribute float aRandom;
+        varying vec3 vColor;
         varying float vAlpha;
         varying float vRandom;
-        varying float vSpeed;
 
         void main() {
+          vColor = aColor;
+          vRandom = aRandom;
+
           vec3 pos = position;
 
-          // Subtle floating animation
+          // Subtle floating animation (scaled for larger coordinate space)
           float floatOffset = aRandom * 6.28318;
-          pos.x += sin(uTime * 0.3 + floatOffset) * 0.02;
-          pos.y += cos(uTime * 0.25 + floatOffset * 1.3) * 0.02;
-          pos.z += sin(uTime * 0.2 + floatOffset * 0.7) * 0.02;
+          pos.x += sin(uTime * 0.3 + floatOffset) * 0.15;
+          pos.y += cos(uTime * 0.25 + floatOffset * 1.3) * 0.15;
+          pos.z += sin(uTime * 0.2 + floatOffset * 0.7) * 0.15;
 
-          // Pulse wave displacement
+          // Pulse wave displacement (scaled for larger space)
           float distFromCenter = length(pos);
-          float pulseHit = smoothstep(uPulseRadius - 1.5, uPulseRadius, distFromCenter)
-                         * smoothstep(uPulseRadius + 1.5, uPulseRadius, distFromCenter);
+          float pulseHit = smoothstep(uPulseRadius - 8.0, uPulseRadius, distFromCenter)
+                         * smoothstep(uPulseRadius + 8.0, uPulseRadius, distFromCenter);
           vec3 pulseDir = distFromCenter > 0.01 ? normalize(pos) : vec3(0.0, 1.0, 0.0);
-          pos += pulseDir * pulseHit * uPulse * 0.5;
+          pos += pulseDir * pulseHit * uPulse * 3.0;
 
           vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-          float dist = -mvPosition.z;
 
-          // Size boost during explosion
+          // Original cosmos sizing formula: size * 200.0 * (400.0 / -mvPosition.z)
           float sizeBoost = 1.0 + uExplosion * 0.8;
-          gl_PointSize = aSize * uScale * sizeBoost * uPixelRatio * (120.0 / dist);
-          gl_PointSize = max(gl_PointSize, 0.5);
+          gl_PointSize = aSize * 200.0 * uScale * sizeBoost * (400.0 / -mvPosition.z);
+          gl_PointSize = max(gl_PointSize, 0.3);
           gl_Position = projectionMatrix * mvPosition;
 
-          vAlpha = smoothstep(50.0, 2.0, dist) * (0.4 + aRandom * 0.6);
-          // Brighten during explosion
+          vAlpha = aBrightness;
           vAlpha *= (1.0 + uExplosion * 1.5);
-          vAlpha = min(vAlpha, 1.0);
-
-          vRandom = aRandom;
-          vSpeed = uExplosion;
+          vAlpha = min(vAlpha, 1.8);
         }
       `,
       fragmentShader: `
-        uniform vec3 uColor;
+        uniform vec3 uTintColor;
+        uniform float uTintAmount;
         uniform float uTime;
         uniform float uExplosion;
+        varying vec3 vColor;
         varying float vAlpha;
         varying float vRandom;
-        varying float vSpeed;
 
         void main() {
           vec2 center = gl_PointCoord - 0.5;
           float dist = length(center);
 
           float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
-          alpha *= alpha;
           alpha *= vAlpha;
 
-          // Color variation per particle
-          vec3 color = uColor;
-          color += vec3(
-            sin(vRandom * 6.28) * 0.12,
-            cos(vRandom * 4.71) * 0.08,
-            sin(vRandom * 3.14) * 0.15
-          );
+          if (alpha < 0.08) discard;
+
+          // Mix star catalog color with tint color
+          vec3 color = mix(vColor * vAlpha, uTintColor, uTintAmount);
 
           // Hot white core during explosion
           float heat = uExplosion * exp(-dist * 4.0) * 0.7;
           color += vec3(heat, heat * 0.8, heat * 0.5);
 
           // Twinkle
-          float twinkle = 0.85 + 0.15 * sin(uTime * 2.0 + vRandom * 50.0);
+          float twinkle = 0.88 + 0.12 * sin(uTime * 2.0 + vRandom * 50.0);
           alpha *= twinkle;
-
-          if (alpha < 0.02) discard;
-
-          // Glow core
-          float core = exp(-dist * 8.0) * 0.4;
-          color += core;
 
           gl_FragColor = vec4(color, alpha);
         }
       `,
       transparent: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      blending: THREE.NormalBlending,  // matches original (NOT Additive)
     });
 
     materialRef.current = material;
@@ -400,11 +400,10 @@ export default function ParticleGestureSystem() {
 
         void main() {
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          float dist = -mvPosition.z;
-          gl_PointSize = 0.6 * uPixelRatio * (120.0 / dist);
-          gl_PointSize = max(gl_PointSize, 0.3);
+          gl_PointSize = 0.003 * 100.0 * (400.0 / -mvPosition.z);
+          gl_PointSize = max(gl_PointSize, 0.2);
           gl_Position = projectionMatrix * mvPosition;
-          vAlpha = aAlpha * smoothstep(50.0, 2.0, dist);
+          vAlpha = aAlpha * smoothstep(300.0, 20.0, -mvPosition.z);
           vRandom = aRandom;
         }
       `,
@@ -417,15 +416,14 @@ export default function ParticleGestureSystem() {
           float dist = length(gl_PointCoord - 0.5);
           float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
           alpha *= vAlpha;
-          if (alpha < 0.01) discard;
-          vec3 color = uColor * 0.6;
-          color += vec3(sin(vRandom * 6.28) * 0.08, cos(vRandom * 4.71) * 0.05, sin(vRandom * 3.14) * 0.1);
+          if (alpha < 0.05) discard;
+          vec3 color = uColor * 0.5;
           gl_FragColor = vec4(color, alpha);
         }
       `,
       transparent: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      blending: THREE.NormalBlending,
     });
 
     trailMaterialRef.current = trailMaterial;
@@ -433,19 +431,19 @@ export default function ParticleGestureSystem() {
     scene.add(trailPoints);
     trailPointsRef.current = trailPoints;
 
-    // ── Background dust ──
-    const dustCount = 3000;
+    // ── Background dust (scaled for larger coordinate space) ──
+    const dustCount = 2000;
     const dustGeometry = new THREE.BufferGeometry();
     const dustPositions = new Float32Array(dustCount * 3);
     for (let i = 0; i < dustCount; i++) {
-      dustPositions[i * 3] = (Math.random() - 0.5) * 30;
-      dustPositions[i * 3 + 1] = (Math.random() - 0.5) * 30;
-      dustPositions[i * 3 + 2] = (Math.random() - 0.5) * 30;
+      dustPositions[i * 3] = (Math.random() - 0.5) * 300;
+      dustPositions[i * 3 + 1] = (Math.random() - 0.5) * 300;
+      dustPositions[i * 3 + 2] = (Math.random() - 0.5) * 300;
     }
     dustGeometry.setAttribute('position', new THREE.Float32BufferAttribute(dustPositions, 3));
     const dustMaterial = new THREE.PointsMaterial({
-      size: 0.015, color: 0x334466, transparent: true, opacity: 0.3,
-      depthWrite: false, blending: THREE.AdditiveBlending,
+      size: 0.08, color: 0x334466, transparent: true, opacity: 0.2,
+      depthWrite: false, blending: THREE.NormalBlending,
     });
     const dust = new THREE.Points(dustGeometry, dustMaterial);
     scene.add(dust);
@@ -481,15 +479,12 @@ export default function ParticleGestureSystem() {
     };
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
-      camera.position.z = Math.max(3, Math.min(20, camera.position.z + e.deltaY * 0.01));
+      camera.position.z = Math.max(40, Math.min(200, camera.position.z + e.deltaY * 0.08));
     };
     const handleResize = () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-      const pr = Math.min(window.devicePixelRatio, 2);
-      material.uniforms.uPixelRatio.value = pr;
-      trailMaterial.uniforms.uPixelRatio.value = pr;
     };
 
     container.addEventListener('mousedown', handleMouseDown);
@@ -523,7 +518,7 @@ export default function ParticleGestureSystem() {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        camera.position.z = Math.max(3, Math.min(20, camera.position.z + (lastTouchDist - dist) * 0.02));
+        camera.position.z = Math.max(40, Math.min(200, camera.position.z + (lastTouchDist - dist) * 0.15));
         lastTouchDist = dist;
       }
     }, { passive: true });
@@ -679,22 +674,34 @@ export default function ParticleGestureSystem() {
         trailAlphaAttr.needsUpdate = true;
       }
 
-      // ── Gesture-based rotation (read from ref, not stale closure) ──
+      // ── Gesture control (read ALL gesture data from ref) ──
       const g = gestureRef.current;
       if (g.handsDetected > 0) {
-        const targetRotY = (g.centerX - 0.5) * Math.PI * 0.5;
-        const targetRotX = (g.centerY - 0.5) * Math.PI * 0.3;
-        gestureRotYRef.current += (targetRotY - gestureRotYRef.current) * 0.05;
-        gestureRotXRef.current += (targetRotX - gestureRotXRef.current) * 0.05;
-      }
+        // 1. Scale: directly read from gesture ref (responsive!)
+        gestureScaleRef.current += (g.scale - gestureScaleRef.current) * 0.12;
 
-      // ── Auto rotation ──
-      if (autoRotate && !isDragging && g.handsDetected === 0) {
-        particles.rotation.y += 0.001;
-        particles.rotation.x += 0.0002;
+        // 2. Rotation: APPLY hand position to particle rotation
+        const targetRotY = (g.centerX - 0.5) * Math.PI * 0.6;
+        const targetRotX = (g.centerY - 0.5) * Math.PI * 0.4;
+        gestureRotYRef.current += (targetRotY - gestureRotYRef.current) * 0.06;
+        gestureRotXRef.current += (targetRotX - gestureRotXRef.current) * 0.06;
+        // Actually apply gesture rotation to particles
+        particles.rotation.y += (gestureRotYRef.current - particles.rotation.y) * 0.04;
+        particles.rotation.x += (gestureRotXRef.current - particles.rotation.x) * 0.04;
         trailPoints.rotation.y = particles.rotation.y;
         trailPoints.rotation.x = particles.rotation.x;
-        dust.rotation.y -= 0.0003;
+      } else {
+        // Smoothly return scale to 1.0 when no hands
+        gestureScaleRef.current += (1.0 - gestureScaleRef.current) * 0.04;
+      }
+
+      // ── Auto rotation (only when no hands and not dragging) ──
+      if (autoRotate && !isDragging && g.handsDetected === 0) {
+        particles.rotation.y += 0.0002;
+        particles.rotation.x += 0.00005;
+        trailPoints.rotation.y = particles.rotation.y;
+        trailPoints.rotation.x = particles.rotation.x;
+        dust.rotation.y -= 0.0001;
       }
 
       material.uniforms.uScale.value = gestureScaleRef.current;

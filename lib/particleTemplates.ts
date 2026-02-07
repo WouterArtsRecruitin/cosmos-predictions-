@@ -302,8 +302,10 @@ function generateDNA(count: number, scale: number): Float32Array {
   return positions;
 }
 
-// Cosmos cluster (default - like existing globular cluster)
+// Cosmos cluster (matches original GlobularClusterVisualization distribution)
 function generateCosmos(count: number, scale: number): Float32Array {
+  const CORE_RADIUS = scale;
+  const HALO_RADIUS = scale * 3;
   const positions = new Float32Array(count * 3);
   const coreCount = Math.floor(count * 0.2);
 
@@ -313,9 +315,9 @@ function generateCosmos(count: number, scale: number): Float32Array {
     let r: number;
 
     if (i < coreCount) {
-      r = Math.pow(Math.random(), 0.5) * scale * 0.3;
+      r = Math.pow(Math.random(), 0.5) * CORE_RADIUS;
     } else {
-      r = scale * 0.3 + Math.pow(Math.random(), 1.2) * scale * 0.7;
+      r = CORE_RADIUS + Math.pow(Math.random(), 1.2) * (HALO_RADIUS - CORE_RADIUS);
     }
 
     positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
