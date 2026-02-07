@@ -258,10 +258,11 @@ export default function CosmosPortal() {
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!question.trim() || question.trim().length < 10) return;
     setIsSubmitting(true);
     window.location.href = `/predictions?q=${encodeURIComponent(question.trim())}`;
-  }, [question]);
+  }, [question, isSubmitting]);
 
   const experiences = [
     {

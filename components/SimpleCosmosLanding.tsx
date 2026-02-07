@@ -223,8 +223,8 @@ export default function SimpleCosmosLanding() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (question.trim()) {
-      router.push(`/predictions?q=${encodeURIComponent(question)}`);
+    if (question.trim().length >= 10) {
+      router.push(`/predictions?q=${encodeURIComponent(question.trim())}`);
     }
   };
 
@@ -254,11 +254,16 @@ export default function SimpleCosmosLanding() {
               
               <button
                 type="submit"
-                disabled={!question.trim()}
+                disabled={question.trim().length < 10}
                 className="w-full mt-2 px-3 py-2 bg-white/5 backdrop-blur-md border border-white/10 rounded text-white/80 text-xs font-light hover:bg-white/10 transition-all disabled:opacity-20 disabled:cursor-not-allowed"
               >
                 Voorspel
               </button>
+              {question.length > 0 && question.length < 10 && (
+                <p className="text-white/40 text-xs mt-1 text-center">
+                  Minimaal 10 karakters ({question.trim().length}/10)
+                </p>
+              )}
             </div>
           </form>
         </div>
