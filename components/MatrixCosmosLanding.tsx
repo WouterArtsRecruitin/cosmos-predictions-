@@ -242,8 +242,8 @@ export default function MatrixCosmosLanding() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (question.trim()) {
-      router.push(`/predictions?q=${encodeURIComponent(question)}`);
+    if (question.trim().length >= 10) {
+      router.push(`/predictions?q=${encodeURIComponent(question.trim())}`);
     }
   };
 
@@ -308,14 +308,20 @@ export default function MatrixCosmosLanding() {
 
                 <button
                   type="submit"
-                  disabled={!question.trim()}
+                  disabled={question.trim().length < 10}
                   className="w-full px-6 py-4 bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl text-white font-light text-lg hover:bg-white/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-white/10"
                 >
                   Genereer voorspellingen
                 </button>
 
-                <p className="text-center text-sm text-white/40">
-                  AI genereert 3 scenario&apos;s: optimistisch, realistisch en pessimistisch
+                <p className={`text-center text-sm transition-colors ${
+                  question.length > 0 && question.length < 10
+                    ? 'text-white/50'
+                    : 'text-white/40'
+                }`}>
+                  {question.length > 0 && question.length < 10
+                    ? `Minimaal 10 karakters (${question.trim().length}/10)`
+                    : 'AI genereert 3 scenario\u0027s: optimistisch, realistisch en pessimistisch'}
                 </p>
               </form>
             </div>
