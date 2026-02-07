@@ -2,15 +2,15 @@
 
 import dynamic from 'next/dynamic';
 
-const GlobularClusterVisualization = dynamic(
-  () => import('@/components/GlobularClusterVisualization'),
+const CosmosPortal = dynamic(
+  () => import('@/components/CosmosPortal'),
   { ssr: false }
 );
 
-export default function CosmosVisualization() {
+export default function HomePage() {
   return (
     <div className="m-0 p-0 w-screen h-screen overflow-hidden">
-      <GlobularClusterVisualization />
+      <CosmosPortal />
     </div>
   );
 }

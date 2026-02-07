@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import NavWrapper from '@/components/NavWrapper'
 
 export const metadata: Metadata = {
   title: 'Cosmos Predictions | Vraag de kosmos over jouw toekomst',
@@ -13,7 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="nl">
-      <body>{children}</body>
+      <body>
+        {children}
+        <NavWrapper />
+      </body>
     </html>
   )
 }
