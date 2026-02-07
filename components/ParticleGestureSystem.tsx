@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
-import { useHandGesture } from '@/hooks/useHandGesture';
+import { useHandGesture, HAND_CONNECTIONS, HandLandmark } from '@/hooks/useHandGesture';
 import { PARTICLE_TEMPLATES, PRESET_COLORS } from '@/lib/particleTemplates';
 
 const PARTICLE_COUNT = 25000;
@@ -62,6 +62,9 @@ export default function ParticleGestureSystem() {
   const [transitionMode, setTransitionMode] = useState<TransitionMode>('explode');
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [captureFlash, setCaptureFlash] = useState(false);
+  const [showCameraPreview, setShowCameraPreview] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const gestureScaleRef = useRef(1.0);
   const gestureRotXRef = useRef(0);
@@ -751,6 +754,143 @@ export default function ParticleGestureSystem() {
     }
   }, [gesture, firePulse]);
 
+  // ── Camera preview: draw video + hand skeleton ──
+  useEffect(() => {
+    if (!cameraEnabled || !gesture.isActive || !showCameraPreview) return;
+
+    const canvas = previewCanvasRef.current;
+    const video = gesture.videoElement;
+    if (!canvas || !video) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let rafId: number;
+    const drawPreview = () => {
+      rafId = requestAnimationFrame(drawPreview);
+
+      const w = canvas.width;
+      const h = canvas.height;
+
+      // Draw mirrored video feed
+      ctx.save();
+      ctx.translate(w, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, w, h);
+      ctx.restore();
+
+      // Dim overlay
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw hand skeletons
+      const hands: { landmarks: HandLandmark[] | null; color: string }[] = [
+        { landmarks: gesture.leftHand, color: '#00e676' },
+        { landmarks: gesture.rightHand, color: '#448aff' },
+      ];
+
+      for (const hand of hands) {
+        if (!hand.landmarks) continue;
+        const lm = hand.landmarks;
+
+        // Draw connections
+        ctx.strokeStyle = hand.color;
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.7;
+        for (const [a, b] of HAND_CONNECTIONS) {
+          ctx.beginPath();
+          ctx.moveTo((1 - lm[a].x) * w, lm[a].y * h);
+          ctx.lineTo((1 - lm[b].x) * w, lm[b].y * h);
+          ctx.stroke();
+        }
+
+        // Draw joints
+        ctx.globalAlpha = 0.9;
+        for (let i = 0; i < lm.length; i++) {
+          const x = (1 - lm[i].x) * w;
+          const y = lm[i].y * h;
+          const isTip = [4, 8, 12, 16, 20].includes(i);
+
+          ctx.beginPath();
+          ctx.arc(x, y, isTip ? 3 : 2, 0, Math.PI * 2);
+          ctx.fillStyle = isTip ? '#ffffff' : hand.color;
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+    };
+
+    drawPreview();
+    return () => cancelAnimationFrame(rafId);
+  }, [cameraEnabled, gesture.isActive, gesture.leftHand, gesture.rightHand, gesture.videoElement, showCameraPreview]);
+
+  // ── Keyboard shortcuts ──
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      // 1-9: select template
+      const num = parseInt(e.key);
+      if (num >= 1 && num <= 9 && num <= PARTICLE_TEMPLATES.length) {
+        e.preventDefault();
+        handleTemplateChange(PARTICLE_TEMPLATES[num - 1].id);
+        return;
+      }
+
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          firePulse(1.0);
+          break;
+        case 'f':
+        case 'F':
+          e.preventDefault();
+          if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+          } else {
+            document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+          }
+          break;
+        case 'c':
+        case 'C':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            setCameraEnabled(prev => !prev);
+          }
+          break;
+        case 'p':
+        case 'P':
+          e.preventDefault();
+          setShowPanel(prev => !prev);
+          break;
+        case 's':
+        case 'S':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            captureScreenshot();
+          }
+          break;
+        case 'h':
+        case 'H':
+          e.preventDefault();
+          setShowCameraPreview(prev => !prev);
+          break;
+      }
+    };
+
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, [handleTemplateChange, firePulse, captureScreenshot]);
+
   // ── React to template changes ──
   useEffect(() => {
     generateTemplate(selectedTemplate, BASE_SCALE);
@@ -769,29 +909,29 @@ export default function ParticleGestureSystem() {
 
       {/* Top bar */}
       <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none">
-        <div className="flex items-center justify-between px-5 py-4">
+        <div className="flex items-center justify-between px-3 sm:px-5 py-3 sm:py-4">
           <div className="pointer-events-auto">
-            <h1 className="text-white/90 text-lg font-light tracking-wider">Cosmos Particles</h1>
-            <p className="text-white/40 text-xs mt-0.5">Interactief 3D deeltjessysteem</p>
+            <h1 className="text-white/90 text-sm sm:text-lg font-light tracking-wider">Cosmos Particles</h1>
+            <p className="text-white/40 text-[10px] sm:text-xs mt-0.5 hidden sm:block">Interactief 3D deeltjessysteem</p>
           </div>
-          <div className="flex items-center gap-3 pointer-events-auto">
+          <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto">
             <button
               onClick={() => setCameraEnabled(!cameraEnabled)}
-              className={`px-4 py-2 rounded-lg text-xs font-medium transition-all duration-300 backdrop-blur-xl border ${
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-medium transition-all duration-300 backdrop-blur-xl border ${
                 cameraEnabled
                   ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 shadow-lg shadow-emerald-500/10'
                   : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:border-white/20'
               }`}
             >
-              {cameraEnabled ? '\u25CF Camera Aan' : '\u25CB Camera Uit'}
+              {cameraEnabled ? '\u25CF Camera' : '\u25CB Camera'}
             </button>
             <button
               onClick={() => setShowPanel(!showPanel)}
-              className={`w-9 h-9 rounded-lg flex items-center justify-center backdrop-blur-xl border transition-all duration-300 ${
+              className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center backdrop-blur-xl border transition-all duration-300 ${
                 showPanel ? 'bg-white/10 border-white/20 text-white/80' : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'
               }`}
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                 <rect x="1" y="2" width="6" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
                 <rect x="9" y="2" width="6" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
                 <rect x="1" y="9" width="6" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
@@ -802,36 +942,49 @@ export default function ParticleGestureSystem() {
         </div>
       </div>
 
-      {/* Side panel */}
-      <div className={`absolute top-20 right-4 z-20 w-64 transition-all duration-500 ease-out ${
-        showPanel ? 'translate-x-0 opacity-100' : 'translate-x-72 opacity-0 pointer-events-none'
-      }`}>
-        {/* Templates */}
-        <div className="bg-black/40 backdrop-blur-2xl border border-white/10 rounded-xl p-4 mb-3">
-          <h3 className="text-white/70 text-xs font-medium uppercase tracking-wider mb-3">Vorm</h3>
-          <div className="grid grid-cols-3 gap-2">
-            {PARTICLE_TEMPLATES.map((template) => (
-              <button
-                key={template.id}
-                onClick={() => handleTemplateChange(template.id)}
-                disabled={isTransitioning}
-                className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-all duration-200 ${
-                  isTransitioning ? 'opacity-50 cursor-wait' : ''
-                } ${selectedTemplate === template.id
-                  ? 'bg-white/15 border border-white/30 shadow-lg'
-                  : 'bg-white/5 border border-transparent hover:bg-white/10 hover:border-white/15'
-                }`}
-              >
-                <span className="text-lg">{template.icon}</span>
-                <span className="text-[10px] text-white/60">{template.name}</span>
+      {/* Side panel - responsive: bottom sheet on mobile, side panel on desktop */}
+      <div className={`
+        fixed sm:absolute z-20 transition-all duration-500 ease-out
+        bottom-12 left-0 right-0 sm:bottom-auto sm:left-auto
+        sm:top-20 sm:right-4 sm:w-64
+        ${showPanel
+          ? 'translate-y-0 sm:translate-y-0 sm:translate-x-0 opacity-100'
+          : 'translate-y-full sm:translate-y-0 sm:translate-x-72 opacity-0 pointer-events-none'
+        }
+      `}>
+        {/* Mobile drag handle */}
+        <div className="sm:hidden flex justify-center pt-2 pb-1 bg-black/60 backdrop-blur-2xl rounded-t-2xl border-t border-x border-white/10">
+          <div className="w-10 h-1 rounded-full bg-white/20" />
+        </div>
+
+        <div className="sm:contents overflow-y-auto max-h-[55vh] sm:max-h-none bg-black/60 sm:bg-transparent backdrop-blur-2xl sm:backdrop-blur-none p-3 sm:p-0 space-y-3 border-x sm:border-0 border-white/10">
+          {/* Templates */}
+          <div className="sm:bg-black/40 sm:backdrop-blur-2xl border-0 sm:border border-white/10 rounded-xl p-0 sm:p-4">
+            <h3 className="text-white/70 text-xs font-medium uppercase tracking-wider mb-3">Vorm</h3>
+            <div className="grid grid-cols-5 sm:grid-cols-3 gap-1.5 sm:gap-2">
+              {PARTICLE_TEMPLATES.map((template, idx) => (
+                <button
+                  key={template.id}
+                  onClick={() => handleTemplateChange(template.id)}
+                  disabled={isTransitioning}
+                  className={`flex flex-col items-center gap-0.5 sm:gap-1 p-1.5 sm:p-2 rounded-lg transition-all duration-200 ${
+                    isTransitioning ? 'opacity-50 cursor-wait' : ''
+                  } ${selectedTemplate === template.id
+                    ? 'bg-white/15 border border-white/30 shadow-lg'
+                    : 'bg-white/5 border border-transparent hover:bg-white/10 hover:border-white/15'
+                  }`}
+                >
+                  <span className="text-base sm:text-lg">{template.icon}</span>
+                  <span className="text-[8px] sm:text-[10px] text-white/60 hidden sm:block">{template.name}</span>
+                  <span className="text-[8px] text-white/30 sm:hidden">{idx + 1}</span>
               </button>
             ))}
           </div>
-        </div>
+          </div>
 
-        {/* Transition mode */}
-        <div className="bg-black/40 backdrop-blur-2xl border border-white/10 rounded-xl p-4 mb-3">
-          <h3 className="text-white/70 text-xs font-medium uppercase tracking-wider mb-3">Transitie</h3>
+          {/* Transition mode */}
+          <div className="sm:bg-black/40 sm:backdrop-blur-2xl border-0 sm:border border-white/10 rounded-xl p-0 sm:p-4">
+            <h3 className="text-white/70 text-xs font-medium uppercase tracking-wider mb-3">Transitie</h3>
           <div className="flex gap-2">
             {TRANSITION_MODES.map((mode) => (
               <button
@@ -848,12 +1001,12 @@ export default function ParticleGestureSystem() {
               </button>
             ))}
           </div>
-        </div>
+          </div>
 
-        {/* Colors */}
-        <div className="bg-black/40 backdrop-blur-2xl border border-white/10 rounded-xl p-4 mb-3">
-          <h3 className="text-white/70 text-xs font-medium uppercase tracking-wider mb-3">Kleur</h3>
-          <div className="grid grid-cols-4 gap-2 mb-3">
+          {/* Colors */}
+          <div className="sm:bg-black/40 sm:backdrop-blur-2xl border-0 sm:border border-white/10 rounded-xl p-0 sm:p-4">
+            <h3 className="text-white/70 text-xs font-medium uppercase tracking-wider mb-3">Kleur</h3>
+            <div className="grid grid-cols-8 sm:grid-cols-4 gap-2 mb-3">
             {PRESET_COLORS.map((color) => (
               <button
                 key={color.hex}
@@ -886,12 +1039,12 @@ export default function ParticleGestureSystem() {
               placeholder="#FFD700"
             />
           </div>
-        </div>
+          </div>
 
-        {/* Gesture info */}
-        {cameraEnabled && (
-          <div className="bg-black/40 backdrop-blur-2xl border border-white/10 rounded-xl p-4">
-            <h3 className="text-white/70 text-xs font-medium uppercase tracking-wider mb-2">Gebaar Detectie</h3>
+          {/* Gesture info */}
+          {cameraEnabled && (
+            <div className="sm:bg-black/40 sm:backdrop-blur-2xl border-0 sm:border border-white/10 rounded-xl p-0 sm:p-4">
+              <h3 className="text-white/70 text-xs font-medium uppercase tracking-wider mb-2">Gebaar Detectie</h3>
             <div className="flex items-center gap-2 mb-2">
               <div className={`w-2 h-2 rounded-full ${gesture.isActive ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600'}`} />
               <span className="text-xs text-white/50">{gesture.isActive ? 'Actief' : 'Initialiseren...'}</span>
@@ -921,45 +1074,94 @@ export default function ParticleGestureSystem() {
                 Sluit je vuisten om ze samen te trekken.
               </p>
             )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Camera preview thumbnail */}
+      {cameraEnabled && gesture.isActive && showCameraPreview && (
+        <div className="absolute bottom-16 left-3 sm:left-5 z-20 group">
+          <div className="relative rounded-xl overflow-hidden border border-white/15 shadow-2xl shadow-black/50 bg-black/50">
+            <canvas
+              ref={previewCanvasRef}
+              width={192}
+              height={144}
+              className="block w-36 h-[108px] sm:w-48 sm:h-36"
+            />
+            {/* Status indicator */}
+            <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
+              <div className={`w-1.5 h-1.5 rounded-full ${gesture.handsDetected > 0 ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
+              <span className="text-[8px] text-white/60 font-medium">
+                {gesture.handsDetected > 0 ? `${gesture.handsDetected} hand${gesture.handsDetected > 1 ? 'en' : ''}` : 'Zoeken...'}
+              </span>
+            </div>
+            {/* Close/hide button */}
+            <button
+              onClick={() => setShowCameraPreview(false)}
+              className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/50 text-white/40 hover:text-white/80 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Minimized camera preview toggle */}
+      {cameraEnabled && gesture.isActive && !showCameraPreview && (
+        <button
+          onClick={() => setShowCameraPreview(true)}
+          className="absolute bottom-16 left-3 sm:left-5 z-20 px-2.5 py-1.5 rounded-lg bg-black/40 backdrop-blur-xl border border-white/10 text-white/40 hover:text-white/70 hover:border-white/20 transition-all text-[10px]"
+        >
+          {gesture.handsDetected > 0 ? '\u25CF' : '\u25CB'} Camera
+        </button>
+      )}
 
       {/* Bottom status bar */}
       <div className="absolute bottom-14 left-0 right-0 z-10 pointer-events-none">
-        <div className="flex items-center justify-between px-5 py-4">
-          <div className="text-white/30 text-xs">
-            {PARTICLE_COUNT.toLocaleString()} deeltjes \u2022{' '}
-            {PARTICLE_TEMPLATES.find(t => t.id === selectedTemplate)?.name}
+        <div className="flex items-center justify-between px-3 sm:px-5 py-3 sm:py-4 gap-2">
+          <div className="text-white/30 text-[10px] sm:text-xs whitespace-nowrap">
+            {PARTICLE_COUNT.toLocaleString()} deeltjes {'\u2022'} {PARTICLE_TEMPLATES.find(t => t.id === selectedTemplate)?.name}
             {isTransitioning && (
-              <span className="ml-2 text-amber-400/60 animate-pulse">\u2022 transitie...</span>
+              <span className="ml-2 text-amber-400/60 animate-pulse">{'\u2022'} transitie...</span>
             )}
           </div>
           {gestureInfo && (
-            <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-full px-3 py-1.5">
+            <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-full px-2 sm:px-3 py-1 sm:py-1.5 hidden sm:block">
               <span className="text-white/50 text-xs">{gestureInfo}</span>
             </div>
           )}
-          <div className="text-white/30 text-xs">Drag om te roteren \u2022 Scroll om te zoomen</div>
+          <div className="text-white/30 text-[10px] sm:text-xs whitespace-nowrap hidden sm:block">Drag om te roteren {'\u2022'} Scroll om te zoomen</div>
         </div>
       </div>
 
       {/* Screenshot button */}
       <button
         onClick={captureScreenshot}
-        className="absolute top-5 left-5 z-30 flex items-center gap-2 px-3 py-2 rounded-lg
+        className="absolute top-14 sm:top-5 left-3 sm:left-5 z-30 flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg
           bg-black/30 backdrop-blur-xl border border-white/10 text-white/40
           hover:bg-black/40 hover:text-white/70 hover:border-white/20
           transition-all duration-200 group"
-        title="Screenshot opslaan"
+        title="Screenshot opslaan (S)"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="group-hover:scale-110 transition-transform">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="group-hover:scale-110 transition-transform">
           <rect x="3" y="3" width="18" height="18" rx="3" />
           <circle cx="12" cy="12" r="4" />
           <circle cx="17.5" cy="6.5" r="1" fill="currentColor" />
         </svg>
-        <span className="text-xs">Capture</span>
+        <span className="text-[10px] sm:text-xs">Capture</span>
       </button>
+
+      {/* Keyboard shortcuts hint (desktop only) */}
+      <div className="absolute bottom-16 right-3 sm:right-5 z-10 hidden sm:block">
+        <div className="bg-black/30 backdrop-blur-xl border border-white/10 rounded-lg px-3 py-2 text-[9px] text-white/20 space-y-0.5 hover:text-white/40 transition-colors">
+          <div><kbd className="px-1 py-0.5 bg-white/5 rounded text-[8px]">1</kbd>-<kbd className="px-1 py-0.5 bg-white/5 rounded text-[8px]">9</kbd> Vormen</div>
+          <div><kbd className="px-1 py-0.5 bg-white/5 rounded text-[8px]">Space</kbd> Puls</div>
+          <div><kbd className="px-1 py-0.5 bg-white/5 rounded text-[8px]">F</kbd> Volledig scherm</div>
+          <div><kbd className="px-1 py-0.5 bg-white/5 rounded text-[8px]">C</kbd> Camera {'\u2022'} <kbd className="px-1 py-0.5 bg-white/5 rounded text-[8px]">S</kbd> Screenshot</div>
+          <div><kbd className="px-1 py-0.5 bg-white/5 rounded text-[8px]">P</kbd> Paneel {'\u2022'} <kbd className="px-1 py-0.5 bg-white/5 rounded text-[8px]">H</kbd> Preview</div>
+        </div>
+      </div>
 
       {/* Flash overlay for screenshot */}
       {captureFlash && (

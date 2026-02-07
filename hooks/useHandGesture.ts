@@ -20,6 +20,7 @@ export interface GestureState {
   centerX: number;         // center point between hands (normalized 0-1)
   centerY: number;
   isActive: boolean;       // whether gesture detection is running
+  videoElement: HTMLVideoElement | null; // for camera preview
 }
 
 const DEFAULT_STATE: GestureState = {
@@ -34,7 +35,24 @@ const DEFAULT_STATE: GestureState = {
   centerX: 0.5,
   centerY: 0.5,
   isActive: false,
+  videoElement: null,
 };
+
+// Hand skeleton connections for drawing overlay
+export const HAND_CONNECTIONS: [number, number][] = [
+  // Thumb
+  [0, 1], [1, 2], [2, 3], [3, 4],
+  // Index
+  [0, 5], [5, 6], [6, 7], [7, 8],
+  // Middle
+  [5, 9], [9, 10], [10, 11], [11, 12],
+  // Ring
+  [9, 13], [13, 14], [14, 15], [15, 16],
+  // Pinky
+  [13, 17], [17, 18], [18, 19], [19, 20],
+  // Palm base
+  [0, 17],
+];
 
 function calculateFingerOpenness(landmarks: HandLandmark[]): number {
   // Finger tip indices: thumb=4, index=8, middle=12, ring=16, pinky=20
@@ -245,6 +263,7 @@ export function useHandGesture(enabled: boolean = true) {
             centerX: s.centerX,
             centerY: s.centerY,
             isActive: true,
+            videoElement: videoRef.current,
           });
         });
 
@@ -270,7 +289,7 @@ export function useHandGesture(enabled: boolean = true) {
         }
 
         if (isMounted) {
-          setGesture(prev => ({ ...prev, isActive: true }));
+          setGesture(prev => ({ ...prev, isActive: true, videoElement: videoRef.current }));
         }
       } catch (err) {
         console.error('Hand detection init failed:', err);
